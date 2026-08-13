@@ -1253,18 +1253,34 @@ async function exportPdf() {
 
     const tRows = [teacherData.slice(0,3), teacherData.slice(3)];
     const tCols = 3, tGap = 30;
-    const tCardW = ((pageW - 2*margin - (tCols-1)*tGap) / tCols) * 0.74;
-    const tImgH = tCardW * (360/300);
     const tLabelFont = 9, tLabelLineH = 11;
     const tRowGap = 10;
-    const tPillW = tCardW + tGap - 6; // пігулка заповнює майже весь проміжок до сусідньої картки, без накладання
+    const baseTCardW = ((pageW - 2*margin - (tCols-1)*tGap) / tCols) * 0.74;
 
-    // Рахуємо висоту КОЖНОГО ряду заздалегідь і перевіряємо місце для ВСЬОГО блоку одразу —
-    // інакше один ряд може влізти на сторінку, а другий стрибне на нову, розірвавши блок.
-    const tRowLabelLines = tRows.map(rowData => rowData.map(t => wrapText(t.label, font, tLabelFont, tPillW-16)));
-    const tRowPillH = tRowLabelLines.map(rowLines => Math.max(24, Math.max(...rowLines.map(l=>l.length))*tLabelLineH+10));
-    // Навмисно НЕ викликаємо ensureSpace тут — блок має лишатися на тій самій сторінці,
-    // що й ONLY-КУРС, а не переходити на нову.
+    // Далі однаково йде примусовий page-break (блок "Тарифи"), тож цей блок ПОВИНЕН
+    // вміститись до низу поточної сторінки. Замість переходу на нову сторінку (що зламало б
+    // порядок і кількість сторінок) — підганяємо розмір фото/пігулок під фактично вільне місце,
+    // щоб нічого не обрізалось знизу.
+    const teacherAvailH = y - margin - 16 - 34; // вільне місце під ряди після заголовка блоку
+    function layoutTeacherRows(cardW) {
+      const imgH = cardW * (360/300);
+      const pillW = cardW + tGap - 6;
+      const rowLabelLines = tRows.map(rowData => rowData.map(t => wrapText(t.label, font, tLabelFont, pillW-16)));
+      const rowPillH = rowLabelLines.map(rowLines => Math.max(24, Math.max(...rowLines.map(l=>l.length))*tLabelLineH+10));
+      const totalH = tRows.reduce((sum, row, ri) => sum + imgH + 8 + rowPillH[ri] + (ri < tRows.length-1 ? tRowGap : 0), 0);
+      return { imgH, pillW, rowLabelLines, rowPillH, totalH };
+    }
+    let tScale = 1;
+    let tLayout = layoutTeacherRows(baseTCardW);
+    while (tLayout.totalH > teacherAvailH && tScale > 0.55) {
+      tScale -= 0.02;
+      tLayout = layoutTeacherRows(baseTCardW * tScale);
+    }
+    const tCardW = baseTCardW * tScale;
+    const tImgH = tLayout.imgH;
+    const tPillW = tLayout.pillW;
+    const tRowLabelLines = tLayout.rowLabelLines;
+    const tRowPillH = tLayout.rowPillH;
 
     y -= 16;
     drawText('ПРЕДМЕТИ, НА ЯКИХ МОЖНА НАВЧАТИСЯ', margin, y, 16, { bold:true, color: navy });
